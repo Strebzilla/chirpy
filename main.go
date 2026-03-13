@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"sync/atomic"
@@ -44,6 +46,50 @@ func healthCheckHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(http.StatusText(http.StatusOK)))
 }
 
+func validateChirpHandler(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+
+	type requestBody struct {
+		Body string `json:"body"`
+	}
+	type responseBody struct {
+		Valid bool `json:"valid"`
+	}
+
+	requestData, err := io.ReadAll(r.Body)
+	if err != nil {
+		respondWithError(w, 500, "couldn't read request")
+	}
+	request := requestBody{}
+	err = json.Unmarshal(requestData, &request)
+	if err != nil {
+		respondWithError(w, 500, "couldn't unmarshal parameters")
+	}
+
+	if len(request.Body) > 140 {
+		respondWithError(w, 400, "Chirp is too long")
+		return
+	}
+	respondWithJSON(w, 200, responseBody{
+		Valid: true,
+	})
+}
+
+func respondWithError(w http.ResponseWriter, code int, message string) error {
+	return respondWithJSON(w, code, map[string]string{"error": message})
+}
+
+func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) error {
+	response, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	w.WriteHeader(code)
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(response)
+	return nil
+}
+
 func main() {
 	const filepathroot = "./app"
 	const port = "8080"
@@ -57,6 +103,7 @@ func main() {
 	mux.HandleFunc("GET /admin/metrics", apiConfig.getMetricsHandler)
 	mux.HandleFunc("POST /admin/reset", apiConfig.resetMetricsHandler)
 	mux.HandleFunc("GET /api/healthz", healthCheckHandler)
+	mux.HandleFunc("POST /api/validate_chirp", validateChirpHandler)
 
 	srv := &http.Server{
 		Addr:    ":8080",
