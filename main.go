@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 	"sync/atomic"
 )
 
@@ -53,12 +54,37 @@ func healthCheckHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func censorProfaneWords(s string) string {
+	original := strings.Split(s, " ")
+
+	censoredWords := []string{
+		"kerfuffle",
+		"sharbert",
+		"fornax",
+	}
+	censor := "****"
+
+	s = strings.ToLower(s)
+	splitCensoredString := strings.Split(s, " ")
+
+	for i, userWord := range splitCensoredString {
+		for _, censoredWord := range censoredWords {
+			if userWord == censoredWord {
+				original[i] = censor
+			}
+		}
+	}
+	censoredString := strings.Join(original, " ")
+	return censoredString
+}
+
 func validateChirpHandler(w http.ResponseWriter, r *http.Request) {
 	type requestBody struct {
 		Body string `json:"body"`
 	}
 	type responseBody struct {
-		Valid bool `json:"valid"`
+		Valid        bool   `json:"valid"`
+		Cleaned_body string `json:"cleaned_body"`
 	}
 
 	requestData, err := io.ReadAll(r.Body)
@@ -77,8 +103,10 @@ func validateChirpHandler(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusBadRequest, "Chirp is too long")
 		return
 	}
+	censoredString := censorProfaneWords(request.Body)
 	respondWithJSON(w, http.StatusOK, responseBody{
-		Valid: true,
+		Valid:        true,
+		Cleaned_body: censoredString,
 	})
 }
 
