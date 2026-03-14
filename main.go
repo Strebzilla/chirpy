@@ -4,8 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
+	"os"
 	"sync/atomic"
 )
 
@@ -25,7 +26,10 @@ func (cfg *apiConfig) getMetricsHandler(w http.ResponseWriter, r *http.Request) 
 
 	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(responseText))
+	_, err := w.Write([]byte(responseText))
+	if err != nil {
+		slog.Error("Error sending response", "error", err, "operation", "http.ResponseWriter.Write")
+	}
 }
 
 func (cfg *apiConfig) resetMetricsHandler(w http.ResponseWriter, r *http.Request) {
@@ -43,12 +47,13 @@ func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
 func healthCheckHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(http.StatusText(http.StatusOK)))
+	_, err := w.Write([]byte(http.StatusText(http.StatusOK)))
+	if err != nil {
+		slog.Error("Error sending response", "error", err, "operation", "http.ResponseWriter.Write")
+	}
 }
 
 func validateChirpHandler(w http.ResponseWriter, r *http.Request) {
-	defer r.Body.Close()
-
 	type requestBody struct {
 		Body string `json:"body"`
 	}
@@ -58,46 +63,60 @@ func validateChirpHandler(w http.ResponseWriter, r *http.Request) {
 
 	requestData, err := io.ReadAll(r.Body)
 	if err != nil {
-		respondWithError(w, 500, "couldn't read request")
+		respondWithError(w, http.StatusInternalServerError, "couldn't read request")
+		return
 	}
 	request := requestBody{}
 	err = json.Unmarshal(requestData, &request)
 	if err != nil {
-		respondWithError(w, 500, "couldn't unmarshal parameters")
+		respondWithError(w, http.StatusBadRequest, http.StatusText(http.StatusBadRequest))
+		return
 	}
 
 	if len(request.Body) > 140 {
-		respondWithError(w, 400, "Chirp is too long")
+		respondWithError(w, http.StatusBadRequest, "Chirp is too long")
 		return
 	}
-	respondWithJSON(w, 200, responseBody{
+	respondWithJSON(w, http.StatusOK, responseBody{
 		Valid: true,
 	})
 }
 
-func respondWithError(w http.ResponseWriter, code int, message string) error {
-	return respondWithJSON(w, code, map[string]string{"error": message})
+func respondWithError(w http.ResponseWriter, code int, message string) {
+	respondWithJSON(w, code, map[string]string{"error": message})
 }
 
-func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) error {
+func respondWithJSON(w http.ResponseWriter, code int, payload any) {
 	response, err := json.Marshal(payload)
 	if err != nil {
-		return err
+		slog.Error("Error marshaling json", "error", err, "operation", "json.Marshal")
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_, err := w.Write([]byte(`{"error":"Internal Server Error"}`))
+		if err != nil {
+			slog.Error("Error sending response", "error", err, "operation", "http.ResponseWriter.Write")
+		}
+		return
 	}
-	w.WriteHeader(code)
+
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(response)
-	return nil
+	w.WriteHeader(code)
+	_, err = w.Write(response)
+	if err != nil {
+		slog.Error("Error sending response", "error", err, "operation", "http.ResponseWriter.Write")
+		return
+	}
 }
 
 func main() {
-	const filepathroot = "./app"
+	const filePathRoot = "./app"
 	const port = "8080"
 
 	apiConfig := apiConfig{}
 
 	mux := http.NewServeMux()
-	appHandler := http.StripPrefix("/app", http.FileServer(http.Dir(filepathroot)))
+	appHandler := http.StripPrefix("/app", http.FileServer(http.Dir(filePathRoot)))
 
 	mux.Handle("/app/", apiConfig.middlewareMetricsInc(appHandler))
 	mux.HandleFunc("GET /admin/metrics", apiConfig.getMetricsHandler)
@@ -106,10 +125,13 @@ func main() {
 	mux.HandleFunc("POST /api/validate_chirp", validateChirpHandler)
 
 	srv := &http.Server{
-		Addr:    ":8080",
+		Addr:    ":" + port,
 		Handler: mux,
 	}
 
-	log.Printf("Serving files from %s on port: %s\n", filepathroot, port)
-	log.Fatal(srv.ListenAndServe())
+	slog.Info("Serving file", "filePathRoot", filePathRoot, "port", port)
+	if err := srv.ListenAndServe(); err != nil {
+		slog.Error("Server error", "error", err)
+		os.Exit(1)
+	}
 }
