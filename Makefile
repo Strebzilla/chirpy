@@ -7,6 +7,9 @@
 #  make fmt    	    # Run formatters on the code
 #  make pre-commit  # Run pre-commit hooks
 
+include .env
+export
+
 BINARY_API    := bin/chirpy
 
 build:
@@ -15,9 +18,18 @@ build:
 run: 
 	./$(BINARY_API)
 
-lint:
-	gofumpt -w .
+lint: fmt
 	golangci-lint run ./...
 
 fmt:
 	gofumpt -w .
+	pg_format -i sql/**/*.sql
+
+db-start:
+	service postgresql start
+
+db-up:
+	goose up
+
+db-down:
+	goose down
