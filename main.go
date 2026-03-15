@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,10 +10,15 @@ import (
 	"os"
 	"strings"
 	"sync/atomic"
+
+	"github.com/Strebzilla/chirpy/internal/database"
+	"github.com/joho/godotenv"
+	_ "github.com/lib/pq"
 )
 
 type apiConfig struct {
 	fileserverHits atomic.Int32
+	dbQueries      *database.Queries
 }
 
 func (cfg *apiConfig) getMetricsHandler(w http.ResponseWriter, r *http.Request) {
@@ -137,27 +143,57 @@ func respondWithJSON(w http.ResponseWriter, code int, payload any) {
 	}
 }
 
-func main() {
+func setupServer() *http.ServeMux {
+	err := godotenv.Load()
+	if err != nil {
+		slog.Error("Error reading environment variables")
+		os.Exit(1)
+	}
+
+	return http.NewServeMux()
+}
+
+func setupDatabase() *database.Queries {
+	dbURL := os.Getenv("DB_URL")
+	dbConnection, err := sql.Open("postgres", dbURL)
+	if err != nil {
+		slog.Error("Error connecting to postgres database")
+		os.Exit(1)
+	}
+
+	dbQueries := database.New(dbConnection)
+
+	return dbQueries
+}
+
+func setupHandlers(mux *http.ServeMux, cfg *apiConfig) {
 	const filePathRoot = "./app"
-	const port = "8080"
 
-	apiConfig := apiConfig{}
-
-	mux := http.NewServeMux()
 	appHandler := http.StripPrefix("/app", http.FileServer(http.Dir(filePathRoot)))
-
-	mux.Handle("/app/", apiConfig.middlewareMetricsInc(appHandler))
-	mux.HandleFunc("GET /admin/metrics", apiConfig.getMetricsHandler)
-	mux.HandleFunc("POST /admin/reset", apiConfig.resetMetricsHandler)
+	mux.Handle("/app/", cfg.middlewareMetricsInc(appHandler))
+	mux.HandleFunc("GET /admin/metrics", cfg.getMetricsHandler)
+	mux.HandleFunc("POST /admin/reset", cfg.resetMetricsHandler)
 	mux.HandleFunc("GET /api/healthz", healthCheckHandler)
 	mux.HandleFunc("POST /api/validate_chirp", validateChirpHandler)
+}
+
+func main() {
+	const port = "8080"
+
+	mux := setupServer()
+	dbQueries := setupDatabase()
+
+	apiConfig := apiConfig{}
+	apiConfig.dbQueries = dbQueries
+
+	setupHandlers(mux, &apiConfig)
 
 	srv := &http.Server{
 		Addr:    ":" + port,
 		Handler: mux,
 	}
 
-	slog.Info("Serving file", "filePathRoot", filePathRoot, "port", port)
+	slog.Info("Serving...", "port", port)
 	if err := srv.ListenAndServe(); err != nil {
 		slog.Error("Server error", "error", err)
 		os.Exit(1)

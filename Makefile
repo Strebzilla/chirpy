@@ -5,7 +5,6 @@
 #  make run         # Run the API server
 #  make lint	    # Run linters on the code
 #  make fmt    	    # Run formatters on the code
-#  make pre-commit  # Run pre-commit hooks
 
 include .env
 export
@@ -19,6 +18,7 @@ run:
 	./$(BINARY_API)
 
 lint: fmt
+	go mod tidy
 	golangci-lint run ./...
 
 fmt:
