@@ -106,23 +106,16 @@ func validateChirpHandler(w http.ResponseWriter, r *http.Request) {
 		Cleaned_body string `json:"cleaned_body"`
 	}
 
-	requestData, err := io.ReadAll(r.Body)
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "couldn't read request")
-		return
-	}
-	request := requestBody{}
-	err = json.Unmarshal(requestData, &request)
-	if err != nil {
-		respondWithError(w, http.StatusBadRequest, http.StatusText(http.StatusBadRequest))
+	body, ok := decodeRequestBody[requestBody](w, r)
+	if !ok {
 		return
 	}
 
-	if len(request.Body) > 140 {
+	if len(body.Body) > 140 {
 		respondWithError(w, http.StatusBadRequest, "Chirp is too long")
 		return
 	}
-	censoredString := censorProfaneWords(request.Body)
+	censoredString := censorProfaneWords(body.Body)
 	respondWithJSON(w, http.StatusOK, responseBody{
 		Valid:        true,
 		Cleaned_body: censoredString,
@@ -140,19 +133,12 @@ func (cfg *apiConfig) usersHandler(w http.ResponseWriter, r *http.Request) {
 		Email     string    `json:"email"`
 	}
 
-	requestData, err := io.ReadAll(r.Body)
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "couldn't read request")
-		return
-	}
-	request := requestBody{}
-	err = json.Unmarshal(requestData, &request)
-	if err != nil {
-		respondWithError(w, http.StatusBadRequest, http.StatusText(http.StatusBadRequest))
+	body, ok := decodeRequestBody[requestBody](w, r)
+	if !ok {
 		return
 	}
 
-	user, err := cfg.dbQueries.CreateUser(r.Context(), request.Email)
+	user, err := cfg.dbQueries.CreateUser(r.Context(), body.Email)
 	if err != nil {
 		slog.Error("Error creating user", "error", err)
 		respondWithError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
@@ -166,6 +152,21 @@ func (cfg *apiConfig) usersHandler(w http.ResponseWriter, r *http.Request) {
 		Email:     user.Email,
 	}
 	respondWithJSON(w, http.StatusCreated, response)
+}
+
+func decodeRequestBody[T any](w http.ResponseWriter, r *http.Request) (T, bool) {
+	var result T
+	data, err := io.ReadAll(r.Body)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "couldn't read request")
+		return result, false
+	}
+	err = json.Unmarshal(data, &result)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, http.StatusText(http.StatusBadRequest))
+		return result, false
+	}
+	return result, true
 }
 
 func respondWithError(w http.ResponseWriter, code int, message string) {
