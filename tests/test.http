@@ -6,7 +6,7 @@
 
 GET {{baseURL}}/api/healthz
 
-###
+### Validate a valid chirp
 
 POST {{baseURL}}/api/validate_chirp
 Content-Type: application/json
@@ -15,7 +15,7 @@ Content-Type: application/json
   "body": "I had something interesting for breakfast"
 }
 
-###
+### Validate a chirp that is too long
 
 POST {{baseURL}}/api/validate_chirp
 Content-Type: application/json
@@ -24,7 +24,7 @@ Content-Type: application/json
   "body": "lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum."
 }
 
-###
+### Validate a chirp that has censored words
 
 POST {{baseURL}}/api/validate_chirp
 Content-Type: application/json
@@ -35,7 +35,7 @@ Content-Type: application/json
 }
 
 
-###
+### Validate a chirp that has multiple censored words
 
 POST {{baseURL}}/api/validate_chirp
 Content-Type: application/json
@@ -44,4 +44,24 @@ Content-Type: application/json
   "body": "I really need a kerfuffle to go to bed sooner, Fornax !"
 }
 
-###
+### Create a user
+
+POST {{baseURL}}/api/users
+Content-Type: application/json
+
+{
+  "email": "mloneusk@example.co"
+}
+
+### Create another user
+
+POST {{baseURL}}/api/users
+Content-Type: application/json
+
+{
+  "email": "dackjorsey@example.co"
+}
+
+### Reset metrics and delete all users
+
+POST {{baseURL}}/admin/reset

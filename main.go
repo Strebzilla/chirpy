@@ -10,8 +10,10 @@ import (
 	"os"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/Strebzilla/chirpy/internal/database"
+	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 )
@@ -19,6 +21,7 @@ import (
 type apiConfig struct {
 	fileserverHits atomic.Int32
 	dbQueries      *database.Queries
+	platform       string
 }
 
 func (cfg *apiConfig) getMetricsHandler(w http.ResponseWriter, r *http.Request) {
@@ -39,8 +42,18 @@ func (cfg *apiConfig) getMetricsHandler(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-func (cfg *apiConfig) resetMetricsHandler(w http.ResponseWriter, r *http.Request) {
+func (cfg *apiConfig) resetHandler(w http.ResponseWriter, r *http.Request) {
+	if cfg.platform != "dev" {
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
 	cfg.fileserverHits.Store(0)
+	_, err := cfg.dbQueries.DeleteAllUsers(r.Context())
+	if err != nil {
+		slog.Error("Error reseting users table", "error", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -116,6 +129,45 @@ func validateChirpHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (cfg *apiConfig) usersHandler(w http.ResponseWriter, r *http.Request) {
+	type requestBody struct {
+		Email string `json:"email"`
+	}
+	type responseBody struct {
+		ID        uuid.UUID `json:"id"`
+		CreatedAt time.Time `json:"created_at"`
+		UpdatedAt time.Time `json:"updated_at"`
+		Email     string    `json:"email"`
+	}
+
+	requestData, err := io.ReadAll(r.Body)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "couldn't read request")
+		return
+	}
+	request := requestBody{}
+	err = json.Unmarshal(requestData, &request)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, http.StatusText(http.StatusBadRequest))
+		return
+	}
+
+	user, err := cfg.dbQueries.CreateUser(r.Context(), request.Email)
+	if err != nil {
+		slog.Error("Error creating user", "error", err)
+		respondWithError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+		return
+	}
+
+	response := responseBody{
+		ID:        user.ID,
+		CreatedAt: user.CreatedAt,
+		UpdatedAt: user.UpdatedAt,
+		Email:     user.Email,
+	}
+	respondWithJSON(w, http.StatusCreated, response)
+}
+
 func respondWithError(w http.ResponseWriter, code int, message string) {
 	respondWithJSON(w, code, map[string]string{"error": message})
 }
@@ -172,8 +224,9 @@ func setupHandlers(mux *http.ServeMux, cfg *apiConfig) {
 	appHandler := http.StripPrefix("/app", http.FileServer(http.Dir(filePathRoot)))
 	mux.Handle("/app/", cfg.middlewareMetricsInc(appHandler))
 	mux.HandleFunc("GET /admin/metrics", cfg.getMetricsHandler)
-	mux.HandleFunc("POST /admin/reset", cfg.resetMetricsHandler)
+	mux.HandleFunc("POST /admin/reset", cfg.resetHandler)
 	mux.HandleFunc("GET /api/healthz", healthCheckHandler)
+	mux.HandleFunc("POST /api/users", cfg.usersHandler)
 	mux.HandleFunc("POST /api/validate_chirp", validateChirpHandler)
 }
 
@@ -185,6 +238,7 @@ func main() {
 
 	apiConfig := apiConfig{}
 	apiConfig.dbQueries = dbQueries
+	apiConfig.platform = os.Getenv("PLATFORM")
 
 	setupHandlers(mux, &apiConfig)
 

@@ -5,5 +5,18 @@
     "markdown": false,
     "scminput": false
   },
-  "terminal.integrated.cwd": "${workspaceFolder}"
+  "terminal.integrated.cwd": "${workspaceFolder}",
+  "sqltools.connections": [
+    {
+      "ssh": "Disabled",
+      "previewLimit": 50,
+      "server": "localhost",
+      "port": 5432,
+      "driver": "PostgreSQL",
+      "name": "chirpy",
+      "database": "chirpy",
+      "username": "postgres",
+      "password": "postgres"
+    }
+  ]
 }

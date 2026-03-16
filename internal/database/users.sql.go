@@ -11,14 +11,9 @@ import (
 
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (id, created_at, updated_at, email)
-VALUES (
-    gen_random_uuid(),
-    NOW(),
-    NOW(),
-    $1
-
-)
-RETURNING id, created_at, updated_at, email
+    VALUES (gen_random_uuid (), NOW(), NOW(), $1)
+RETURNING
+    id, created_at, updated_at, email
 `
 
 func (q *Queries) CreateUser(ctx context.Context, email string) (User, error) {
@@ -31,4 +26,34 @@ func (q *Queries) CreateUser(ctx context.Context, email string) (User, error) {
 		&i.Email,
 	)
 	return i, err
+}
+
+const deleteAllUsers = `-- name: DeleteAllUsers :many
+TRUNCATE TABLE users
+`
+
+type DeleteAllUsersRow struct {
+}
+
+func (q *Queries) DeleteAllUsers(ctx context.Context) ([]DeleteAllUsersRow, error) {
+	rows, err := q.db.QueryContext(ctx, deleteAllUsers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DeleteAllUsersRow
+	for rows.Next() {
+		var i DeleteAllUsersRow
+		if err := rows.Scan(); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
