@@ -40,8 +40,23 @@ Content-Type: application/json
 
 {
   "body": "If you're committed enough, you can make any story work.",
-  "user_id": "e1dbb0e9-432e-449a-ac14-28478bb20065"
+  "user_id": "05bbdae4-7458-442b-beda-12b7fbf658e5"
 }
+
+### Create a chirp
+
+POST {{baseURL}}/api/chirps
+Content-Type: application/json
+
+{
+  "body": "I once told a woman I was Kevin Costner, and it worked because I believed it.",
+  "user_id": "05bbdae4-7458-442b-beda-12b7fbf658e5"
+}
+
+### Get all chirps
+
+GET {{baseURL}}/api/chirps
+
 
 ### Reset metrics and delete all users
 

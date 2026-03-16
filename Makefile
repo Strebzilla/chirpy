@@ -1,4 +1,4 @@
-# Makefile for SecretHold
+# Makefile for Chirpy
 #
 # Usage:
 #  make build       # Build the API server binary
@@ -14,7 +14,7 @@ BINARY_API    := bin/chirpy
 build:
 	go build -o $(BINARY_API) .
 
-run: 
+run: build
 	./$(BINARY_API)
 
 lint: fmt
@@ -33,3 +33,6 @@ db-up:
 
 db-down:
 	goose down
+
+clean:
+	rm -f $(BINARY_API)
