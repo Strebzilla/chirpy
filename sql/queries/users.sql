@@ -5,5 +5,5 @@ RETURNING
     *;
 
 -- name: DeleteAllUsers :many
-TRUNCATE TABLE users;
+TRUNCATE TABLE users CASCADE;
 

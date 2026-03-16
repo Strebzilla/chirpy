@@ -29,7 +29,7 @@ func (q *Queries) CreateUser(ctx context.Context, email string) (User, error) {
 }
 
 const deleteAllUsers = `-- name: DeleteAllUsers :many
-TRUNCATE TABLE users
+TRUNCATE TABLE users CASCADE
 `
 
 type DeleteAllUsersRow struct {
