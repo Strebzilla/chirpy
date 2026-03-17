@@ -1,17 +1,11 @@
 # Makefile for Chirpy
-#
-# Usage:
-#  make build       # Build the API server binary
-#  make run         # Run the API server
-#  make lint	    # Run linters on the code
-#  make fmt    	    # Run formatters on the code
 
 include .env
 export
 
-BINARY_API    := bin/chirpy
+BINARY_API := bin/chirpy
 
-build:
+build: clean
 	go build -o $(BINARY_API) .
 
 run: build
@@ -22,6 +16,7 @@ lint: fmt
 	golangci-lint run ./...
 
 fmt:
+	betteralign -apply ./...
 	gofumpt -w .
 	pg_format -i sql/**/*.sql
 
@@ -34,8 +29,14 @@ db-up:
 db-down:
 	goose down
 
+db-reset:
+	goose down-to 0
+
 clean:
 	rm -f $(BINARY_API)
 
 sqlc:
 	sqlc generate
+
+test:
+	go test ./...

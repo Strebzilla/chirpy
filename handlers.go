@@ -14,18 +14,18 @@ import (
 )
 
 type chirpsResponse struct {
-	ID        uuid.UUID `json:"id"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 	Body      string    `json:"body"`
+	ID        uuid.UUID `json:"id"`
 	UserID    uuid.UUID `json:"user_id"`
 }
 
 type usersResponse struct {
-	ID        uuid.UUID `json:"id"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 	Email     string    `json:"email"`
+	ID        uuid.UUID `json:"id"`
 }
 
 func setupHandlers(mux *http.ServeMux, cfg *apiConfig) {
@@ -41,6 +41,13 @@ func setupHandlers(mux *http.ServeMux, cfg *apiConfig) {
 	mux.HandleFunc("GET /api/chirps", cfg.getAllChirpsHandler)
 	mux.HandleFunc("GET /api/chirps/{id}", cfg.getChirpHandler)
 	mux.HandleFunc("POST /api/login", cfg.loginHandler)
+}
+
+func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cfg.fileserverHits.Add(1)
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (cfg *apiConfig) getMetricsHandler(w http.ResponseWriter, r *http.Request) {
