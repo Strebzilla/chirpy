@@ -87,7 +87,8 @@ SELECT
     user_id
 FROM
     chirps
-WHERE id = $1
+WHERE
+    id = $1
 `
 
 func (q *Queries) GetChirp(ctx context.Context, id uuid.UUID) (Chirp, error) {
