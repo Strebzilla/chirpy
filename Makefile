@@ -36,3 +36,6 @@ db-down:
 
 clean:
 	rm -f $(BINARY_API)
+
+sql:
+	sqlc generate
