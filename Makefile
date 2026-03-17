@@ -12,11 +12,11 @@ run: build
 	./$(BINARY_API)
 
 lint: fmt
+	betteralign -apply ./...
 	go mod tidy
 	golangci-lint run ./...
 
-fmt:
-	betteralign -apply ./...
+fmt:	
 	gofumpt -w .
 	pg_format -i sql/**/*.sql
 

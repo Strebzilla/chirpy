@@ -50,6 +50,13 @@ func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
 	})
 }
 
+func validateChirp(chirp string) error {
+	if len(chirp) > 140 {
+		return errors.New("chirp is too long")
+	}
+	return nil
+}
+
 func (cfg *apiConfig) getMetricsHandler(w http.ResponseWriter, r *http.Request) {
 	responseText := fmt.Sprintf(`
 	<html>
@@ -90,13 +97,6 @@ func healthCheckHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.Error("Error sending response", "error", err, "operation", "http.ResponseWriter.Write")
 	}
-}
-
-func validateChirp(chirp string) error {
-	if len(chirp) > 140 {
-		return errors.New("chirp is too long")
-	}
-	return nil
 }
 
 func (cfg *apiConfig) createUserHandler(w http.ResponseWriter, r *http.Request) {
