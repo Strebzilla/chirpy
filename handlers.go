@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -30,6 +31,7 @@ func setupHandlers(mux *http.ServeMux, cfg *apiConfig) {
 	mux.HandleFunc("POST /api/users", cfg.usersHandler)
 	mux.HandleFunc("POST /api/chirps", cfg.chirpsHandler)
 	mux.HandleFunc("GET /api/chirps", cfg.getAllChirpsHandler)
+	mux.HandleFunc("GET /api/chirps/{id}", cfg.getChirpHandler)
 }
 
 func (cfg *apiConfig) getMetricsHandler(w http.ResponseWriter, r *http.Request) {
@@ -167,4 +169,30 @@ func (cfg *apiConfig) getAllChirpsHandler(w http.ResponseWriter, r *http.Request
 	}
 
 	respondWithJSON(w, http.StatusOK, response)
+}
+
+func (cfg *apiConfig) getChirpHandler(w http.ResponseWriter, r *http.Request) {
+	userID, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, http.StatusText(http.StatusBadRequest))
+		return
+	}
+
+	chirp, err := cfg.dbQueries.GetChirp(r.Context(), userID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			respondWithError(w, http.StatusNotFound, http.StatusText(http.StatusNotFound))
+			return
+		}
+		slog.Error("Error getting chirp", "error", err)
+		respondWithError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+		return
+	}
+	respondWithJSON(w, http.StatusOK, chirpsResponse{
+		ID:        chirp.ID,
+		CreatedAt: chirp.CreatedAt,
+		UpdatedAt: chirp.UpdatedAt,
+		Body:      chirp.Body,
+		UserID:    chirp.UserID,
+	})
 }
