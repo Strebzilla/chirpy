@@ -136,8 +136,7 @@ func (cfg *apiConfig) createUserHandler(w http.ResponseWriter, r *http.Request) 
 
 func (cfg *apiConfig) chirpsHandler(w http.ResponseWriter, r *http.Request) {
 	type request struct {
-		Body   string    `json:"body"`
-		UserId uuid.UUID `json:"user_id"`
+		Body string `json:"body"`
 	}
 
 	body, ok := decodeRequestBody[request](w, r)
@@ -146,20 +145,33 @@ func (cfg *apiConfig) chirpsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := validateChirp(body.Body)
+	token, err := auth.GetBearerToken(r.Header)
 	if err != nil {
 		respondWithError(w, http.StatusBadRequest, http.StatusText(http.StatusBadRequest))
 		return
 	}
+	authID, err := auth.ValidateJWT(token, cfg.jwtSecret)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, http.StatusText(http.StatusUnauthorized))
+		return
+	}
+
+	err = validateChirp(body.Body)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, http.StatusText(http.StatusBadRequest))
+		return
+	}
+
 	chirp, err := cfg.dbQueries.CreateChirp(r.Context(), database.CreateChirpParams{
 		Body:   body.Body,
-		UserID: body.UserId,
+		UserID: authID,
 	})
 	if err != nil {
 		slog.Error("Error creating chirp", "error", err)
 		respondWithError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 		return
 	}
+
 	respondWithJSON(w, http.StatusCreated, chirpsResponse{
 		ID:        chirp.ID,
 		CreatedAt: chirp.CreatedAt,
@@ -220,8 +232,17 @@ func (cfg *apiConfig) getChirpHandler(w http.ResponseWriter, r *http.Request) {
 
 func (cfg *apiConfig) loginHandler(w http.ResponseWriter, r *http.Request) {
 	type request struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
+		Email            string `json:"email"`
+		Password         string `json:"password"`
+		ExpiresInSeconds int    `json:"expires_in_seconds"`
+	}
+
+	type response struct {
+		CreatedAt time.Time `json:"created_at"`
+		UpdatedAt time.Time `json:"updated_at"`
+		Email     string    `json:"email"`
+		Token     string    `json:"token"`
+		ID        uuid.UUID `json:"id"`
 	}
 
 	body, ok := decodeRequestBody[request](w, r)
@@ -251,10 +272,23 @@ func (cfg *apiConfig) loginHandler(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusUnauthorized, http.StatusText(http.StatusUnauthorized))
 		return
 	}
-	respondWithJSON(w, http.StatusOK, usersResponse{
+
+	timeout := time.Duration(time.Hour)
+	if body.ExpiresInSeconds > 0 {
+		timeout = time.Duration(body.ExpiresInSeconds)
+	}
+	token, err := auth.MakeJWT(user.ID, cfg.jwtSecret, timeout)
+	if err != nil {
+		slog.Error("Could not make JWT", "error", err)
+		respondWithError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+		return
+	}
+
+	respondWithJSON(w, http.StatusOK, response{
 		ID:        user.ID,
 		CreatedAt: user.CreatedAt,
 		UpdatedAt: user.UpdatedAt,
 		Email:     user.Email,
+		Token:     token,
 	})
 }

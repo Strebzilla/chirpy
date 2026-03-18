@@ -14,6 +14,7 @@ import (
 type apiConfig struct {
 	dbQueries      *database.Queries
 	platform       string
+	jwtSecret      string
 	fileserverHits atomic.Int32
 }
 
@@ -26,6 +27,7 @@ func main() {
 	apiConfig := apiConfig{}
 	apiConfig.dbQueries = dbQueries
 	apiConfig.platform = os.Getenv("PLATFORM")
+	apiConfig.jwtSecret = os.Getenv("JWT_SECRET")
 
 	setupHandlers(mux, &apiConfig)
 
