@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -74,4 +76,11 @@ func GetBearerToken(headers http.Header) (string, error) {
 		return "", errors.New("bearer token not found in authorization header")
 	}
 	return token, nil
+}
+
+func MakeRefreshToken() string {
+	nonce := make([]byte, 32)
+	rand.Read(nonce) // Ignoring returns because this function no longer returns errors if it can't use /dev/urandom, it just crashes
+	token := hex.EncodeToString(nonce)
+	return token
 }
