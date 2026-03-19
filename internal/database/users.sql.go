@@ -7,6 +7,7 @@ package database
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -102,7 +103,10 @@ SET
 WHERE
     id = $1
 RETURNING
-    id, created_at, updated_at, email, hashed_password
+    id,
+    updated_at,
+    created_at,
+    email
 `
 
 type UpdateUserEmailAndPasswordParams struct {
@@ -111,15 +115,21 @@ type UpdateUserEmailAndPasswordParams struct {
 	HashedPassword string
 }
 
-func (q *Queries) UpdateUserEmailAndPassword(ctx context.Context, arg UpdateUserEmailAndPasswordParams) (User, error) {
+type UpdateUserEmailAndPasswordRow struct {
+	ID        uuid.UUID
+	UpdatedAt time.Time
+	CreatedAt time.Time
+	Email     string
+}
+
+func (q *Queries) UpdateUserEmailAndPassword(ctx context.Context, arg UpdateUserEmailAndPasswordParams) (UpdateUserEmailAndPasswordRow, error) {
 	row := q.db.QueryRowContext(ctx, updateUserEmailAndPassword, arg.ID, arg.Email, arg.HashedPassword)
-	var i User
+	var i UpdateUserEmailAndPasswordRow
 	err := row.Scan(
 		&i.ID,
-		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CreatedAt,
 		&i.Email,
-		&i.HashedPassword,
 	)
 	return i, err
 }

@@ -44,6 +44,7 @@ func setupHandlers(mux *http.ServeMux, cfg *apiConfig) {
 	mux.HandleFunc("POST /api/chirps", cfg.chirpsHandler)
 	mux.HandleFunc("GET /api/chirps", cfg.getAllChirpsHandler)
 	mux.HandleFunc("GET /api/chirps/{id}", cfg.getChirpHandler)
+	mux.HandleFunc("DELETE /api/chirps/{id}", cfg.deleteChirpHandler)
 
 	mux.HandleFunc("GET /api/healthz", healthCheckHandler)
 	mux.HandleFunc("POST /api/login", cfg.loginHandler)
@@ -63,6 +64,20 @@ func validateChirp(chirp string) error {
 		return errors.New("chirp is too long")
 	}
 	return nil
+}
+
+func (cfg *apiConfig) authenticateRequest(w http.ResponseWriter, r *http.Request) (uuid.UUID, error) {
+	accessToken, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, http.StatusText(http.StatusUnauthorized))
+		return uuid.Nil, errors.New("authorization header invalid")
+	}
+	user_id, err := auth.ValidateJWT(accessToken, cfg.jwtSecret)
+	if err != nil {
+		respondWithError(w, http.StatusForbidden, http.StatusText(http.StatusForbidden))
+		return uuid.Nil, errors.New("unable to validate jwt token")
+	}
+	return user_id, nil
 }
 
 func respondWithDatabaseError(w http.ResponseWriter, err error) {
@@ -151,15 +166,8 @@ func (cfg *apiConfig) updateUserHandler(w http.ResponseWriter, r *http.Request) 
 		Password string `json:"password"`
 	}
 
-	accessToken, err := auth.GetBearerToken(r.Header)
+	user_id, err := cfg.authenticateRequest(w, r)
 	if err != nil {
-		respondWithError(w, http.StatusUnauthorized, http.StatusText(http.StatusUnauthorized))
-		return
-	}
-
-	user_id, err := auth.ValidateJWT(accessToken, cfg.jwtSecret)
-	if err != nil {
-		respondWithError(w, http.StatusUnauthorized, http.StatusText(http.StatusUnauthorized))
 		return
 	}
 
@@ -197,19 +205,13 @@ func (cfg *apiConfig) chirpsHandler(w http.ResponseWriter, r *http.Request) {
 		Body string `json:"body"`
 	}
 
-	body, ok := decodeRequestBody[request](w, r)
-	if !ok {
+	user_id, err := cfg.authenticateRequest(w, r)
+	if err != nil {
 		return
 	}
 
-	token, err := auth.GetBearerToken(r.Header)
-	if err != nil {
-		respondWithError(w, http.StatusUnauthorized, http.StatusText(http.StatusUnauthorized))
-		return
-	}
-	authID, err := auth.ValidateJWT(token, cfg.jwtSecret)
-	if err != nil {
-		respondWithError(w, http.StatusUnauthorized, http.StatusText(http.StatusUnauthorized))
+	body, ok := decodeRequestBody[request](w, r)
+	if !ok {
 		return
 	}
 
@@ -221,7 +223,7 @@ func (cfg *apiConfig) chirpsHandler(w http.ResponseWriter, r *http.Request) {
 
 	chirp, err := cfg.dbQueries.CreateChirp(r.Context(), database.CreateChirpParams{
 		Body:   body.Body,
-		UserID: authID,
+		UserID: user_id,
 	})
 	if err != nil {
 		respondWithDatabaseError(w, err)
@@ -260,13 +262,13 @@ func (cfg *apiConfig) getAllChirpsHandler(w http.ResponseWriter, r *http.Request
 }
 
 func (cfg *apiConfig) getChirpHandler(w http.ResponseWriter, r *http.Request) {
-	userID, err := uuid.Parse(r.PathValue("id"))
+	chirpID, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
 		respondWithError(w, http.StatusBadRequest, http.StatusText(http.StatusBadRequest))
 		return
 	}
 
-	chirp, err := cfg.dbQueries.GetChirp(r.Context(), userID)
+	chirp, err := cfg.dbQueries.GetChirp(r.Context(), chirpID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			respondWithError(w, http.StatusNotFound, http.StatusText(http.StatusNotFound))
@@ -283,6 +285,36 @@ func (cfg *apiConfig) getChirpHandler(w http.ResponseWriter, r *http.Request) {
 		Body:      chirp.Body,
 		UserID:    chirp.UserID,
 	})
+}
+
+func (cfg *apiConfig) deleteChirpHandler(w http.ResponseWriter, r *http.Request) {
+	user_id, err := cfg.authenticateRequest(w, r)
+	if err != nil {
+		return
+	}
+
+	chirpID, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, http.StatusText(http.StatusBadRequest))
+		return
+	}
+
+	chirp, err := cfg.dbQueries.GetChirp(r.Context(), chirpID)
+	if err != nil {
+		respondWithDatabaseError(w, err)
+		return
+	}
+	if chirp.UserID != user_id {
+		respondWithError(w, http.StatusForbidden, http.StatusText(http.StatusForbidden))
+		return
+	}
+
+	err = cfg.dbQueries.DeleteChirp(r.Context(), chirpID)
+	if err != nil {
+		respondWithDatabaseError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (cfg *apiConfig) loginHandler(w http.ResponseWriter, r *http.Request) {

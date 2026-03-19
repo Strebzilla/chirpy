@@ -29,5 +29,8 @@ SET
 WHERE
     id = $1
 RETURNING
-    *;
+    id,
+    updated_at,
+    created_at,
+    email;
 
