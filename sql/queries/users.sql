@@ -1,6 +1,6 @@
 -- name: CreateUser :one
-INSERT INTO users (id, created_at, updated_at, email, hashed_password)
-    VALUES (gen_random_uuid (), NOW(), NOW(), $1, $2)
+INSERT INTO users (id, created_at, updated_at, email, hashed_password, is_chirpy_red)
+    VALUES (gen_random_uuid (), NOW(), NOW(), $1, $2, FALSE)
 RETURNING
     *;
 
@@ -13,7 +13,8 @@ SELECT
     created_at,
     updated_at,
     email,
-    hashed_password
+    hashed_password,
+    is_chirpy_red
 FROM
     users
 WHERE
@@ -32,5 +33,14 @@ RETURNING
     id,
     updated_at,
     created_at,
-    email;
+    email,
+    is_chirpy_red;
+
+-- name: SetIsChirpyRedWithId :execrows
+UPDATE
+    users
+SET
+    is_chirpy_red = $2
+WHERE
+    id = $1;
 

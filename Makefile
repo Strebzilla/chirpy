@@ -5,13 +5,13 @@ export
 
 BINARY_API := bin/chirpy
 
-build: clean
+build: check clean
 	go build -o $(BINARY_API) .
 
 run: build
 	./$(BINARY_API)
 
-lint: fmt
+lint:
 	betteralign -apply ./...
 	go mod tidy
 	golangci-lint run ./...
@@ -40,3 +40,5 @@ sqlc:
 
 test:
 	go test ./...
+
+check: db-up sqlc lint test fmt

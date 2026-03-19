@@ -22,10 +22,11 @@ type chirpsResponse struct {
 }
 
 type usersResponse struct {
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	Email     string    `json:"email"`
-	ID        uuid.UUID `json:"id"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+	Email       string    `json:"email"`
+	ID          uuid.UUID `json:"id"`
+	IsChirpyRed bool      `json:"is_chirpy_red"`
 }
 
 var accessTokenTimeout time.Duration = time.Hour
@@ -50,6 +51,7 @@ func setupHandlers(mux *http.ServeMux, cfg *apiConfig) {
 	mux.HandleFunc("POST /api/login", cfg.loginHandler)
 	mux.HandleFunc("POST /api/refresh", cfg.refreshHandler)
 	mux.HandleFunc("POST /api/revoke", cfg.revokeHandler)
+	mux.HandleFunc("POST /api/polka/webhooks", cfg.polkaWebhooksHandler)
 }
 
 func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
@@ -153,10 +155,11 @@ func (cfg *apiConfig) createUserHandler(w http.ResponseWriter, r *http.Request) 
 	}
 
 	respondWithJSON(w, http.StatusCreated, usersResponse{
-		ID:        user.ID,
-		CreatedAt: user.CreatedAt,
-		UpdatedAt: user.UpdatedAt,
-		Email:     user.Email,
+		ID:          user.ID,
+		CreatedAt:   user.CreatedAt,
+		UpdatedAt:   user.UpdatedAt,
+		Email:       user.Email,
+		IsChirpyRed: user.IsChirpyRed,
 	})
 }
 
@@ -193,10 +196,11 @@ func (cfg *apiConfig) updateUserHandler(w http.ResponseWriter, r *http.Request) 
 	}
 
 	respondWithJSON(w, http.StatusOK, usersResponse{
-		ID:        user.ID,
-		CreatedAt: user.CreatedAt,
-		UpdatedAt: user.UpdatedAt,
-		Email:     user.Email,
+		ID:          user.ID,
+		CreatedAt:   user.CreatedAt,
+		UpdatedAt:   user.UpdatedAt,
+		Email:       user.Email,
+		IsChirpyRed: user.IsChirpyRed,
 	})
 }
 
@@ -330,6 +334,7 @@ func (cfg *apiConfig) loginHandler(w http.ResponseWriter, r *http.Request) {
 		Token        string    `json:"token"`
 		RefreshToken string    `json:"refresh_token"`
 		ID           uuid.UUID `json:"id"`
+		IsChirpyRed  bool      `json:"is_chirpy_red"`
 	}
 
 	body, ok := decodeRequestBody[request](w, r)
@@ -387,6 +392,7 @@ func (cfg *apiConfig) loginHandler(w http.ResponseWriter, r *http.Request) {
 		Email:        user.Email,
 		Token:        accessToken,
 		RefreshToken: refreshToken,
+		IsChirpyRed:  user.IsChirpyRed,
 	})
 }
 
@@ -451,6 +457,39 @@ func (cfg *apiConfig) revokeHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		respondWithDatabaseError(w, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (cfg *apiConfig) polkaWebhooksHandler(w http.ResponseWriter, r *http.Request) {
+	type request struct {
+		Event string `json:"event"`
+		Data  struct {
+			UserID uuid.UUID `json:"user_id"`
+		} `json:"data"`
+	}
+
+	body, ok := decodeRequestBody[request](w, r)
+	if !ok {
+		return
+	}
+
+	if body.Event != "user.upgraded" {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	rows, err := cfg.dbQueries.SetIsChirpyRedWithId(r.Context(), database.SetIsChirpyRedWithIdParams{
+		ID:          body.Data.UserID,
+		IsChirpyRed: true,
+	})
+	if err != nil {
+		respondWithDatabaseError(w, err)
+		return
+	}
+	if rows == 0 {
+		respondWithError(w, http.StatusNotFound, http.StatusText(http.StatusNotFound))
 		return
 	}
 

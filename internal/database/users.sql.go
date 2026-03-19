@@ -13,10 +13,10 @@ import (
 )
 
 const createUser = `-- name: CreateUser :one
-INSERT INTO users (id, created_at, updated_at, email, hashed_password)
-    VALUES (gen_random_uuid (), NOW(), NOW(), $1, $2)
+INSERT INTO users (id, created_at, updated_at, email, hashed_password, is_chirpy_red)
+    VALUES (gen_random_uuid (), NOW(), NOW(), $1, $2, FALSE)
 RETURNING
-    id, created_at, updated_at, email, hashed_password
+    id, created_at, updated_at, email, hashed_password, is_chirpy_red
 `
 
 type CreateUserParams struct {
@@ -33,6 +33,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.UpdatedAt,
 		&i.Email,
 		&i.HashedPassword,
+		&i.IsChirpyRed,
 	)
 	return i, err
 }
@@ -73,7 +74,8 @@ SELECT
     created_at,
     updated_at,
     email,
-    hashed_password
+    hashed_password,
+    is_chirpy_red
 FROM
     users
 WHERE
@@ -89,8 +91,31 @@ func (q *Queries) GetUser(ctx context.Context, email string) (User, error) {
 		&i.UpdatedAt,
 		&i.Email,
 		&i.HashedPassword,
+		&i.IsChirpyRed,
 	)
 	return i, err
+}
+
+const setIsChirpyRedWithId = `-- name: SetIsChirpyRedWithId :execrows
+UPDATE
+    users
+SET
+    is_chirpy_red = $2
+WHERE
+    id = $1
+`
+
+type SetIsChirpyRedWithIdParams struct {
+	ID          uuid.UUID
+	IsChirpyRed bool
+}
+
+func (q *Queries) SetIsChirpyRedWithId(ctx context.Context, arg SetIsChirpyRedWithIdParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, setIsChirpyRedWithId, arg.ID, arg.IsChirpyRed)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const updateUserEmailAndPassword = `-- name: UpdateUserEmailAndPassword :one
@@ -106,7 +131,8 @@ RETURNING
     id,
     updated_at,
     created_at,
-    email
+    email,
+    is_chirpy_red
 `
 
 type UpdateUserEmailAndPasswordParams struct {
@@ -116,10 +142,11 @@ type UpdateUserEmailAndPasswordParams struct {
 }
 
 type UpdateUserEmailAndPasswordRow struct {
-	ID        uuid.UUID
-	UpdatedAt time.Time
-	CreatedAt time.Time
-	Email     string
+	ID          uuid.UUID
+	UpdatedAt   time.Time
+	CreatedAt   time.Time
+	Email       string
+	IsChirpyRed bool
 }
 
 func (q *Queries) UpdateUserEmailAndPassword(ctx context.Context, arg UpdateUserEmailAndPasswordParams) (UpdateUserEmailAndPasswordRow, error) {
@@ -130,6 +157,7 @@ func (q *Queries) UpdateUserEmailAndPassword(ctx context.Context, arg UpdateUser
 		&i.UpdatedAt,
 		&i.CreatedAt,
 		&i.Email,
+		&i.IsChirpyRed,
 	)
 	return i, err
 }
