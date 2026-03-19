@@ -15,14 +15,6 @@ FROM
 WHERE
     token = $1;
 
--- name: GetUserFromRefreshToken :one
-SELECT
-    user_id
-FROM
-    refresh_tokens
-WHERE
-    token = $1;
-
 -- name: ExpireRefreshToken :one
 UPDATE
     refresh_tokens
