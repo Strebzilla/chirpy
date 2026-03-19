@@ -6,6 +6,7 @@ RETURNING
 
 -- name: GetRefreshToken :one
 SELECT
+    user_id,
     token,
     expires_at,
     revoked_at
@@ -22,12 +23,14 @@ FROM
 WHERE
     token = $1;
 
--- name: ExpireRefreshToken :exec
+-- name: ExpireRefreshToken :one
 UPDATE
     refresh_tokens
 SET
     revoked_at = NOW(),
     updated_at = NOW()
 WHERE
-    token = $1;
+    token = $1
+RETURNING
+    *;
 

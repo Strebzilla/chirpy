@@ -61,6 +61,11 @@ func validateChirp(chirp string) error {
 	return nil
 }
 
+func respondWithDatabaseError(w http.ResponseWriter, err error) {
+	slog.Error("database failure", "error", err)
+	respondWithError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+}
+
 func (cfg *apiConfig) getMetricsHandler(w http.ResponseWriter, r *http.Request) {
 	responseText := fmt.Sprintf(`
 	<html>
@@ -87,8 +92,7 @@ func (cfg *apiConfig) resetHandler(w http.ResponseWriter, r *http.Request) {
 	cfg.fileserverHits.Store(0)
 	_, err := cfg.dbQueries.DeleteAllUsers(r.Context())
 	if err != nil {
-		slog.Error("Error reseting users table", "error", err)
-		w.WriteHeader(http.StatusInternalServerError)
+		respondWithDatabaseError(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
@@ -125,8 +129,7 @@ func (cfg *apiConfig) createUserHandler(w http.ResponseWriter, r *http.Request) 
 		HashedPassword: hashedPassword,
 	})
 	if err != nil {
-		slog.Error("Error creating user", "error", err)
-		respondWithError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+		respondWithDatabaseError(w, err)
 		return
 	}
 
@@ -171,8 +174,7 @@ func (cfg *apiConfig) chirpsHandler(w http.ResponseWriter, r *http.Request) {
 		UserID: authID,
 	})
 	if err != nil {
-		slog.Error("Error creating chirp", "error", err)
-		respondWithError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+		respondWithDatabaseError(w, err)
 		return
 	}
 
@@ -188,8 +190,7 @@ func (cfg *apiConfig) chirpsHandler(w http.ResponseWriter, r *http.Request) {
 func (cfg *apiConfig) getAllChirpsHandler(w http.ResponseWriter, r *http.Request) {
 	chirps, err := cfg.dbQueries.GetAllChirps(r.Context())
 	if err != nil {
-		slog.Error("Error getting chirps", "error", err)
-		respondWithError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+		respondWithDatabaseError(w, err)
 		return
 	}
 
@@ -261,8 +262,7 @@ func (cfg *apiConfig) loginHandler(w http.ResponseWriter, r *http.Request) {
 			respondWithError(w, http.StatusNotFound, http.StatusText(http.StatusNotFound))
 			return
 		}
-		slog.Error("Error getting user", "error", err)
-		respondWithError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+		respondWithDatabaseError(w, err)
 		return
 	}
 
@@ -295,8 +295,7 @@ func (cfg *apiConfig) loginHandler(w http.ResponseWriter, r *http.Request) {
 		ExpiresAt: refreshTokenTimeout,
 	})
 	if err != nil {
-		slog.Error("Error inserting refresh token into database", "error", err)
-		respondWithError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+		respondWithDatabaseError(w, err)
 		return
 	}
 
@@ -324,13 +323,12 @@ func (cfg *apiConfig) refreshHandler(w http.ResponseWriter, r *http.Request) {
 
 	refreshToken, err := cfg.dbQueries.GetRefreshToken(r.Context(), bearerToken)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			slog.Error("refresh token not found")
 			respondWithError(w, http.StatusUnauthorized, http.StatusText(http.StatusUnauthorized))
 			return
 		}
-		slog.Error("could not get refresh token from database")
-		respondWithError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+		respondWithDatabaseError(w, err)
 		return
 	}
 	now := time.Now()
@@ -341,21 +339,13 @@ func (cfg *apiConfig) refreshHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if refreshToken.RevokedAt.Valid {
-		if now.After(refreshToken.RevokedAt.Time) {
-			slog.Error("refresh token is revoked")
-			respondWithError(w, http.StatusUnauthorized, http.StatusText(http.StatusUnauthorized))
-			return
-		}
-	}
-
-	userId, err := cfg.dbQueries.GetUserFromRefreshToken(r.Context(), refreshToken.Token)
-	if err != nil {
-		slog.Error("could not get user_id from database")
-		respondWithError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+		slog.Error("refresh token is revoked")
+		respondWithError(w, http.StatusUnauthorized, http.StatusText(http.StatusUnauthorized))
 		return
 	}
+
 	// Create access token
-	accessToken, err := auth.MakeJWT(userId, cfg.jwtSecret, accessTokenTimeout)
+	accessToken, err := auth.MakeJWT(refreshToken.UserID, cfg.jwtSecret, accessTokenTimeout)
 	if err != nil {
 		slog.Error("Could not make JWT", "error", err)
 		respondWithError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
@@ -373,9 +363,13 @@ func (cfg *apiConfig) revokeHandler(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusBadRequest, http.StatusText(http.StatusBadRequest))
 		return
 	}
-	err = cfg.dbQueries.ExpireRefreshToken(r.Context(), bearerToken)
+	_, err = cfg.dbQueries.ExpireRefreshToken(r.Context(), bearerToken)
 	if err != nil {
-		respondWithError(w, http.StatusUnauthorized, http.StatusText(http.StatusUnauthorized))
+		if errors.Is(err, sql.ErrNoRows) {
+			respondWithError(w, http.StatusUnauthorized, http.StatusText(http.StatusUnauthorized))
+			return
+		}
+		respondWithDatabaseError(w, err)
 		return
 	}
 
