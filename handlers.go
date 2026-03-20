@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sort"
 	"time"
 
 	"github.com/Strebzilla/chirpy/internal/auth"
@@ -247,15 +248,17 @@ func (cfg *apiConfig) getAllChirpsHandler(w http.ResponseWriter, r *http.Request
 	var chirps []database.Chirp
 	var err error
 
-	author_id := r.URL.Query().Get("author_id")
-	if author_id == "" {
+	authorIdParameter := r.URL.Query().Get("author_id")
+	sortParameter := r.URL.Query().Get("sort")
+
+	if authorIdParameter == "" {
 		chirps, err = cfg.dbQueries.GetAllChirps(r.Context())
 		if err != nil {
 			respondWithDatabaseError(w, err)
 			return
 		}
 	} else {
-		author_uuid, err := uuid.Parse(author_id)
+		author_uuid, err := uuid.Parse(authorIdParameter)
 		if err != nil {
 			respondWithError(w, http.StatusBadRequest, http.StatusText(http.StatusBadRequest))
 		}
@@ -277,7 +280,9 @@ func (cfg *apiConfig) getAllChirpsHandler(w http.ResponseWriter, r *http.Request
 			UserID:    chirp.UserID,
 		})
 	}
-
+	if sortParameter == "desc" {
+		sort.Slice(response, func(i, j int) bool { return response[i].CreatedAt.After(response[j].CreatedAt) })
+	}
 	respondWithJSON(w, http.StatusOK, response)
 }
 
