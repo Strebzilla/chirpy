@@ -244,10 +244,26 @@ func (cfg *apiConfig) chirpsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (cfg *apiConfig) getAllChirpsHandler(w http.ResponseWriter, r *http.Request) {
-	chirps, err := cfg.dbQueries.GetAllChirps(r.Context())
-	if err != nil {
-		respondWithDatabaseError(w, err)
-		return
+	var chirps []database.Chirp
+	var err error
+
+	author_id := r.URL.Query().Get("author_id")
+	if author_id == "" {
+		chirps, err = cfg.dbQueries.GetAllChirps(r.Context())
+		if err != nil {
+			respondWithDatabaseError(w, err)
+			return
+		}
+	} else {
+		author_uuid, err := uuid.Parse(author_id)
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, http.StatusText(http.StatusBadRequest))
+		}
+		chirps, err = cfg.dbQueries.GetAllChirpsByAuthor(r.Context(), author_uuid)
+		if err != nil {
+			respondWithDatabaseError(w, err)
+			return
+		}
 	}
 
 	var response []chirpsResponse
