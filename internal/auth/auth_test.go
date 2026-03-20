@@ -81,3 +81,32 @@ func TestGetBearerToken(t *testing.T) {
 		})
 	}
 }
+
+func TestGetApiKey(t *testing.T) {
+	tests := map[string]struct {
+		input   http.Header
+		want    string
+		wantErr bool
+	}{
+		"valid input": {input: http.Header{"Authorization": []string{"ApiKey abc123"}}, want: "abc123", wantErr: false},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			got, err := GetAPIKey(tc.input)
+
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Fatalf("Mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}

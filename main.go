@@ -15,6 +15,7 @@ type apiConfig struct {
 	dbQueries      *database.Queries
 	platform       string
 	jwtSecret      string
+	polkaKey       string
 	fileserverHits atomic.Int32
 }
 
@@ -28,6 +29,7 @@ func main() {
 	apiConfig.dbQueries = dbQueries
 	apiConfig.platform = os.Getenv("PLATFORM")
 	apiConfig.jwtSecret = os.Getenv("JWT_SECRET")
+	apiConfig.polkaKey = os.Getenv("POLKA_KEY")
 
 	setupHandlers(mux, &apiConfig)
 

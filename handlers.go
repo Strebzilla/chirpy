@@ -471,6 +471,12 @@ func (cfg *apiConfig) polkaWebhooksHandler(w http.ResponseWriter, r *http.Reques
 		} `json:"data"`
 	}
 
+	apiKey, err := auth.GetAPIKey(r.Header)
+	if err != nil || apiKey != cfg.polkaKey {
+		respondWithError(w, http.StatusUnauthorized, http.StatusText(http.StatusUnauthorized))
+		return
+	}
+
 	body, ok := decodeRequestBody[request](w, r)
 	if !ok {
 		return
