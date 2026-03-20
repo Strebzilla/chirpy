@@ -80,7 +80,7 @@ func GetBearerToken(headers http.Header) (string, error) {
 
 func MakeRefreshToken() string {
 	nonce := make([]byte, 32)
-	rand.Read(nonce) // Ignoring returns because this function no longer returns errors if it can't use /dev/urandom, it just crashes
+	rand.Read(nonce) // Ignoring the error return because this function no longer returns errors if it can't use /dev/urandom, it just crashes
 	token := hex.EncodeToString(nonce)
 	return token
 }

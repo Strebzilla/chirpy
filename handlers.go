@@ -261,6 +261,7 @@ func (cfg *apiConfig) getAllChirpsHandler(w http.ResponseWriter, r *http.Request
 		author_uuid, err := uuid.Parse(authorIdParameter)
 		if err != nil {
 			respondWithError(w, http.StatusBadRequest, http.StatusText(http.StatusBadRequest))
+			return
 		}
 		chirps, err = cfg.dbQueries.GetAllChirpsByAuthor(r.Context(), author_uuid)
 		if err != nil {
@@ -468,7 +469,7 @@ func (cfg *apiConfig) refreshHandler(w http.ResponseWriter, r *http.Request) {
 func (cfg *apiConfig) revokeHandler(w http.ResponseWriter, r *http.Request) {
 	bearerToken, err := auth.GetBearerToken(r.Header)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, http.StatusText(http.StatusBadRequest))
+		respondWithError(w, http.StatusUnauthorized, http.StatusText(http.StatusUnauthorized))
 		return
 	}
 	_, err = cfg.dbQueries.ExpireRefreshToken(r.Context(), bearerToken)
